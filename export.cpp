@@ -1,25 +1,58 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <fstream>
 #include "Vertica.h"
+
+// as per https://my.vertica.com/docs/7.1.x/HTML/index.htm#Authoring/ExtendingHPVertica/UDx/CreatingAPolymorphicUDF.htm
+#define MAX_ARGS 1600
 
 using namespace Vertica;
 using namespace std;
 
-/*
- * TODO
- * - cache file name in Export
- * - cache column types somehow, and then just dispatch
- *   to particular export function by type (rather than
- *   go throuh if/switch in each iteration of the loop
- * - add gzip and/or bzip compression
- */
+enum ExportType {
+	INT,
+	NUMERIC,
+	FLOAT,
+	VARCHAR,
+	DATE
+};
+
+class Export;
+typedef void (Export::*col_writer_func_t)(BlockReader&, size_t);
 
 class Export : public ScalarFunction
 {
 
 private:
-FILE *fh;
+fstream    fh;
+size_t     num_cols;
+ExportType col_type[MAX_ARGS];
+col_writer_func_t col_writer[MAX_ARGS];
+
+void write_int(BlockReader &br, size_t i)
+{
+	this->fh << br.getIntRef(i);
+}
+
+void write_numeric(BlockReader &br, size_t i)
+{
+	this->fh << br.getNumericRef(i).toFloat();
+}
+
+void write_float(BlockReader &br, size_t i)
+{
+	this->fh << br.getFloatRef(i);
+}
+
+void write_varchar(BlockReader &br, size_t i)
+{
+	this->fh << br.getStringRef(i).str();
+}
+
+void write_date(BlockReader &br, size_t i)
+{
+}
 
 public:
 
@@ -27,27 +60,63 @@ virtual void
 setup (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 {
 	srvInterface.log("Export::setup()");
-	ParamReader paramReader(srvInterface.getParamReader());
 
+	ParamReader paramReader(srvInterface.getParamReader());
 	if (!paramReader.containsParameter("fpath"))
 		vt_report_error(0, "Missing fpath parameter.");
 
+	this->num_cols = argTypes.getColumnCount();
+	for (size_t i = 0; i < this->num_cols; i++)
+	{
+		const VerticaType col_type = argTypes.getColumnType(i);
+		if (col_type.isInt())
+		{
+			this->col_type[i] = INT;
+			this->col_writer[i] = &Export::write_int;
+		}
+		else if (col_type.isNumeric())
+		{
+			this->col_type[i] = NUMERIC;
+			this->col_writer[i] = &Export::write_numeric;
+		}
+		else if (col_type.isFloat())
+		{
+			this->col_type[i] = FLOAT;
+			this->col_writer[i] = &Export::write_float;
+		}
+		else if (col_type.isVarchar())
+		{
+			this->col_type[i] = VARCHAR;
+			this->col_writer[i] = &Export::write_varchar;
+		}
+		else if (col_type.isDate())
+		{
+			this->col_type[i] = DATE;
+			this->col_writer[i] = &Export::write_date;
+		}
+		else
+			vt_report_error(0, "Unsupported export type.");
+	}
+
 	string fpath = paramReader.getStringRef("fpath").str();
-	if (NULL == (this->fh = fopen(fpath.c_str(), "w")))
+	try
+	{
+		this->fh.open(fpath.c_str(), fstream::out | fstream::trunc);
+	}
+	catch (exception e)
+	{
 		vt_report_error(0, "Failed to open file [%s] for writing: %s",
 			fpath.c_str(),
-			strerror(errno)
+			e.what()
 		);
+	}
 }
 
 virtual void
 destroy (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 {
 	srvInterface.log("Export::destroy()");
-	if (0 != fclose(this->fh))
-		vt_report_error(0, "Failed to close file: %s",
-			strerror(errno)
-		);
+	this->fh.close();
 }
 
 virtual void
@@ -56,7 +125,14 @@ processBlock (ServerInterface &srvInterface, BlockReader &arg_reader, BlockWrite
 	srvInterface.log("Export::processBlock()");
 
 	do {
-		fwrite("this is a foo line\n", 19, 1, this->fh);
+		size_t i;
+		for (i = 0; i < this->num_cols-1; i++)
+		{
+			(this->*col_writer[i])(arg_reader, i);
+			this->fh << ',';
+		}
+		(this->*col_writer[i])(arg_reader, i);
+		this->fh << endl;
 
 		res_writer.setInt(1);
 		res_writer.next();
