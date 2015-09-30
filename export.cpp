@@ -1,14 +1,17 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+
 #include <fstream>
 #include <limits>
+
 #include "Vertica.h"
 
 // as per https://my.vertica.com/docs/7.1.x/HTML/index.htm#Authoring/ExtendingHPVertica/UDx/CreatingAPolymorphicUDF.htm
 #define MAX_ARGS 1600
-
 #define NUMERIC_CHAR_BUF_SIZE 127
+#define DATE_CHAR_BUF_SIZE 16
 
 using namespace Vertica;
 using namespace std;
@@ -33,6 +36,9 @@ size_t     num_cols;
 ExportType col_type[MAX_ARGS];
 col_writer_func_t col_writer[MAX_ARGS];
 char       tmp_numeric_cstr[NUMERIC_CHAR_BUF_SIZE+1]; // extra char for \0
+char       tmp_date_cstr[DATE_CHAR_BUF_SIZE];
+struct tm  tmp_tm;
+time_t     tmp_epoch;
 
 void write_int(BlockReader &br, size_t i)
 {
@@ -57,7 +63,12 @@ void write_varchar(BlockReader &br, size_t i)
 
 void write_date(BlockReader &br, size_t i)
 {
-	this->fh << br.getDateRef(i);
+	// 86400 = # of seconds in a day
+	// 946684800 = unix epoch of 2000-01-01
+	this->tmp_epoch = (time_t)br.getDateRef(i)*86400+946684800;
+	localtime_r(&this->tmp_epoch, &this->tmp_tm);
+	strftime(this->tmp_date_cstr, DATE_CHAR_BUF_SIZE, "%Y-%m-%d", &this->tmp_tm);
+	this->fh << this->tmp_date_cstr;
 }
 
 public:
