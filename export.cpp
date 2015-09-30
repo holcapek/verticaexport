@@ -29,6 +29,7 @@ fstream    fh;
 size_t     num_cols;
 ExportType col_type[MAX_ARGS];
 col_writer_func_t col_writer[MAX_ARGS];
+char       tmp_numeric_cstr[129];
 
 void write_int(BlockReader &br, size_t i)
 {
@@ -37,7 +38,8 @@ void write_int(BlockReader &br, size_t i)
 
 void write_numeric(BlockReader &br, size_t i)
 {
-	this->fh << br.getNumericRef(i).toFloat();
+	br.getNumericRef(i).toString(this->tmp_numeric_cstr, 128);
+	this->fh << this->tmp_numeric_cstr;
 }
 
 void write_float(BlockReader &br, size_t i)
@@ -52,6 +54,7 @@ void write_varchar(BlockReader &br, size_t i)
 
 void write_date(BlockReader &br, size_t i)
 {
+	this->fh << br.getDateRef(i);
 }
 
 public:
@@ -128,10 +131,12 @@ processBlock (ServerInterface &srvInterface, BlockReader &arg_reader, BlockWrite
 		size_t i;
 		for (i = 0; i < this->num_cols-1; i++)
 		{
-			(this->*col_writer[i])(arg_reader, i);
+			if (!arg_reader.isNull(i))
+				(this->*col_writer[i])(arg_reader, i);
 			this->fh << ',';
 		}
-		(this->*col_writer[i])(arg_reader, i);
+		if (!arg_reader.isNull(i))
+			(this->*col_writer[i])(arg_reader, i);
 		this->fh << endl;
 
 		res_writer.setInt(1);
