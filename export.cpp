@@ -2,10 +2,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <fstream>
+#include <limits>
 #include "Vertica.h"
 
 // as per https://my.vertica.com/docs/7.1.x/HTML/index.htm#Authoring/ExtendingHPVertica/UDx/CreatingAPolymorphicUDF.htm
 #define MAX_ARGS 1600
+
+#define NUMERIC_CHAR_BUF_SIZE 127
 
 using namespace Vertica;
 using namespace std;
@@ -29,7 +32,7 @@ fstream    fh;
 size_t     num_cols;
 ExportType col_type[MAX_ARGS];
 col_writer_func_t col_writer[MAX_ARGS];
-char       tmp_numeric_cstr[129];
+char       tmp_numeric_cstr[NUMERIC_CHAR_BUF_SIZE+1]; // extra char for \0
 
 void write_int(BlockReader &br, size_t i)
 {
@@ -38,7 +41,7 @@ void write_int(BlockReader &br, size_t i)
 
 void write_numeric(BlockReader &br, size_t i)
 {
-	br.getNumericRef(i).toString(this->tmp_numeric_cstr, 128);
+	br.getNumericRef(i).toString(this->tmp_numeric_cstr, NUMERIC_CHAR_BUF_SIZE);
 	this->fh << this->tmp_numeric_cstr;
 }
 
@@ -105,6 +108,7 @@ setup (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 	try
 	{
 		this->fh.open(fpath.c_str(), fstream::out | fstream::trunc);
+		this->fh.precision(numeric_limits<vfloat>::digits10);
 	}
 	catch (exception e)
 	{
@@ -113,6 +117,9 @@ setup (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 			e.what()
 		);
 	}
+
+	// just to be sure \0 is there
+	this->tmp_numeric_cstr[NUMERIC_CHAR_BUF_SIZE] = '\0';
 }
 
 virtual void
