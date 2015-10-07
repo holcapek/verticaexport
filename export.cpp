@@ -9,9 +9,10 @@
 #include "Vertica.h"
 
 // as per https://my.vertica.com/docs/7.1.x/HTML/index.htm#Authoring/ExtendingHPVertica/UDx/CreatingAPolymorphicUDF.htm
-#define MAX_ARGS 1600
+// number of arguments of the function, ie. number columns
+#define MAX_ARGS              1600
 #define NUMERIC_CHAR_BUF_SIZE 127
-#define DATE_CHAR_BUF_SIZE 16
+#define DATE_CHAR_BUF_SIZE    16
 
 using namespace Vertica;
 using namespace std;
@@ -31,14 +32,15 @@ class Export : public ScalarFunction
 {
 
 private:
-fstream    fh;
-size_t     num_cols;
-ExportType col_type[MAX_ARGS];
+fstream           fh;
+// number of columns, must be <= MAX_COLS
+size_t            num_cols;
+ExportType        col_type[MAX_ARGS];
 col_writer_func_t col_writer[MAX_ARGS];
-char       tmp_numeric_cstr[NUMERIC_CHAR_BUF_SIZE+1]; // extra char for \0
-char       tmp_date_cstr[DATE_CHAR_BUF_SIZE];
-struct tm  tmp_tm;
-time_t     tmp_epoch;
+char              tmp_numeric_cstr[NUMERIC_CHAR_BUF_SIZE+1]; // extra char for \0
+char              tmp_date_cstr[DATE_CHAR_BUF_SIZE];
+struct tm         tmp_tm;
+time_t            tmp_epoch;
 
 void write_int(BlockReader &br, size_t i)
 {
@@ -63,9 +65,17 @@ void write_varchar(BlockReader &br, size_t i)
 
 void write_date(BlockReader &br, size_t i)
 {
-	// 86400 = # of seconds in a day
+	// $(VERTICA_SDK)/include/TimestampUDxShared.h
+	// DateADT represent number of days since 2000-01-01
+	// including backward dates
+
+	//     86400 = # of seconds per day
 	// 946684800 = unix epoch of 2000-01-01
+
+	// get epoch of the date
 	this->tmp_epoch = (time_t)br.getDateRef(i)*86400+946684800;
+
+	// extract date fragments, format it, print it out
 	localtime_r(&this->tmp_epoch, &this->tmp_tm);
 	strftime(this->tmp_date_cstr, DATE_CHAR_BUF_SIZE, "%Y-%m-%d", &this->tmp_tm);
 	this->fh << this->tmp_date_cstr;
@@ -74,41 +84,42 @@ void write_date(BlockReader &br, size_t i)
 public:
 
 virtual void
-setup (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
-{
-	srvInterface.log("Export::setup()");
-
+setup (
+	ServerInterface &srvInterface,
+	const SizedColumnTypes &argTypes
+) {
 	ParamReader paramReader(srvInterface.getParamReader());
 	if (!paramReader.containsParameter("fpath"))
 		vt_report_error(0, "Missing fpath parameter.");
 
+	// setup dispatcher for particular type
 	this->num_cols = argTypes.getColumnCount();
 	for (size_t i = 0; i < this->num_cols; i++)
 	{
 		const VerticaType col_type = argTypes.getColumnType(i);
 		if (col_type.isInt())
 		{
-			this->col_type[i] = INT;
+			this->col_type[i]   = INT;
 			this->col_writer[i] = &Export::write_int;
 		}
 		else if (col_type.isNumeric())
 		{
-			this->col_type[i] = NUMERIC;
+			this->col_type[i]   = NUMERIC;
 			this->col_writer[i] = &Export::write_numeric;
 		}
 		else if (col_type.isFloat())
 		{
-			this->col_type[i] = FLOAT;
+			this->col_type[i]   = FLOAT;
 			this->col_writer[i] = &Export::write_float;
 		}
 		else if (col_type.isVarchar())
 		{
-			this->col_type[i] = VARCHAR;
+			this->col_type[i]   = VARCHAR;
 			this->col_writer[i] = &Export::write_varchar;
 		}
 		else if (col_type.isDate())
 		{
-			this->col_type[i] = DATE;
+			this->col_type[i]   = DATE;
 			this->col_writer[i] = &Export::write_date;
 		}
 		else
@@ -136,15 +147,12 @@ setup (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 virtual void
 destroy (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 {
-	srvInterface.log("Export::destroy()");
 	this->fh.close();
 }
 
 virtual void
 processBlock (ServerInterface &srvInterface, BlockReader &arg_reader, BlockWriter &res_writer)
 {
-	srvInterface.log("Export::processBlock()");
-
 	do {
 		size_t i;
 		for (i = 0; i < this->num_cols-1; i++)
@@ -175,8 +183,11 @@ createScalarFunction (ServerInterface &srvInterface)
 }
 
 virtual void
-getPrototype (ServerInterface &srvInterface, ColumnTypes &argTypes, ColumnTypes &returnType)
-{
+getPrototype (
+	ServerInterface &srvInterface,
+	ColumnTypes     &argTypes,
+	ColumnTypes &returnType
+) {
 	argTypes.addAny();
 	returnType.addInt();
 }
