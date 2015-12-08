@@ -1,10 +1,12 @@
 \set ON_ERROR_STOP on
 
-CREATE OR REPLACE LIBRARY ExportLib
+DROP LIBRARY IF EXISTS ExportLib CASCADE;
+
+CREATE LIBRARY ExportLib
 	AS '/tmp/libexport.so'
 	LANGUAGE 'C++';
 
-CREATE OR REPLACE FUNCTION export
+CREATE FUNCTION export
 	AS LANGUAGE 'C++'
 	NAME 'ExportFactory'
 	LIBRARY Exportlib;
