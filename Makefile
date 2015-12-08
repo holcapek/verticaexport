@@ -1,6 +1,7 @@
 VERTICA_SDK=/opt/vertica/sdk
 
 CXXFLAGS=-I $(VERTICA_SDK)/include -fPIC -Wall
+LDFLAGS=-lpthread
 
 all: libexport.so
 
@@ -11,7 +12,7 @@ export.o: export.cpp
 	$(CXX) -c $(CXXFLAGS) $?
 
 libexport.so: Vertica.o export.o
-	$(CXX) $(CXXFLAGS) -shared -o $@ $?
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared -o $@ $?
 
 clean:
 	rm -f *.o *.so
