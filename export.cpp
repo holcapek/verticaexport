@@ -7,8 +7,8 @@
 
 #include "Vertica.h"
 
+// maximum number of arguments of a (variadic) scalar function is 1600
 // as per https://my.vertica.com/docs/7.1.x/HTML/index.htm#Authoring/ExtendingHPVertica/UDx/CreatingAPolymorphicUDF.htm
-// number of arguments of the function, ie. number columns
 #define MAX_COLUMNS 1600
 
 #define FIELD_DELIMITER ','
@@ -57,6 +57,7 @@ size_t       export_size;
 off_t        export_offset;
 off_t        export_last_record_end_offset;
 ServerInterface *srv_if;
+long         rows_processed;
 
 void write_buffer()
 {
@@ -69,18 +70,17 @@ void write_buffer()
 	this->srv_if->log("method=write_buffer tid=%u bytes_wrote=%lu", this->tid, len);
 	memcpy(
 		this->export_buffer,
-		this->export_buffer + this->export_last_record_end_offset, 
+		(void *)(this->export_buffer + this->export_last_record_end_offset),
 		this->export_offset - this->export_last_record_end_offset
 	);
 
-	this->export_offset = 0;
+	this->export_offset = this->export_offset - this->export_last_record_end_offset;
 	this->export_last_record_end_offset = 0;
 }
 
 void write_int(ServerInterface &srv_if, BlockReader &br, size_t i)
 {
-	int len;
-	len = sprintf(
+	int len = sprintf(
 		this->export_buffer + this->export_offset,
 		"%llu",
 		*br.getIntPtr(i)
@@ -235,6 +235,7 @@ setup (
 	this->export_buffer = (char *)malloc(EXPORT_BUFFER_SIZE);
 	this->export_offset = 0;
 	this->export_last_record_end_offset = 0;
+	this->rows_processed = 0;
 
 	this->srv_if = &srvInterface;
 
@@ -266,6 +267,8 @@ destroy (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 
 	pthread_mutex_unlock(&destroy_mutex);
 	// destroy_mutex}
+	//
+	srvInterface.log("method=destroy tid=%u rows_processed=%lu", this->tid, this->rows_processed);
 
 	free(this->export_buffer);
 }
@@ -273,13 +276,10 @@ destroy (ServerInterface &srvInterface, const SizedColumnTypes &argTypes)
 virtual void
 processBlock (ServerInterface &srvInterface, BlockReader &arg_reader, BlockWriter &res_writer)
 {
-	//srvInterface.log("processBlock, thread %u", this->tid);
-	//
-
-	long rows_processed = 0;
+	// loop over rows
 	do {
-		size_t i;
-		for (i = 0; i < num_cols; i++)
+		// loop over columns of the row
+		for (size_t i = 0; i < num_cols; i++)
 		{
 			if (!arg_reader.isNull(i)) {
 				(this->*col_writer[i])(srvInterface, arg_reader, i);
@@ -293,7 +293,7 @@ processBlock (ServerInterface &srvInterface, BlockReader &arg_reader, BlockWrite
 
 		res_writer.setInt(1);
 		res_writer.next();
-		rows_processed += 1;
+		this->rows_processed += 1;
 	} while (arg_reader.next());
 
 	if (this->export_offset > 0)
@@ -301,7 +301,6 @@ processBlock (ServerInterface &srvInterface, BlockReader &arg_reader, BlockWrite
 		write_buffer();
 	}
 
-	srvInterface.log("method=process tid=%u rows_processed=%lu", this->tid, rows_processed);
 }
 
 }; // class Export
