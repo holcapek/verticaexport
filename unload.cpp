@@ -21,7 +21,7 @@
 #define EXPORT_BUFFER_HWM ((int)(EXPORT_BUFFER_SIZE*0.8))
 
 using namespace Vertica;
-using namespace std;
+//using namespace std;
 
 class Export;
 typedef void (Export::*col_writer_func_t)(ServerInterface&, BlockReader&, size_t);
