@@ -3,22 +3,16 @@ VERTICA_SDK=/opt/vertica/sdk
 CXXFLAGS=-I $(VERTICA_SDK)/include -fPIC -Wall
 LDFLAGS=-lpthread
 
-all: libexport.so
+all: libunload.so
 
-Vertica.o: $(VERTICA_SDK)/include/Vertica.cpp
+verticaudx.o: $(VERTICA_SDK)/include/Vertica.cpp
+	$(CXX) -o $@ -c $(CXXFLAGS) $?
+
+unload.o: unload.cpp
 	$(CXX) -c $(CXXFLAGS) $?
 
-export.o: export.cpp
-	$(CXX) -c $(CXXFLAGS) $?
-
-libexport.so: Vertica.o export.o
+libunload.so: verticaudx.o unload.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared -o $@ $?
 
 clean:
 	rm -f *.o *.so
-
-install: libexport.so
-	cp $^ /tmp
-	/opt/vertica/bin/vsql -U vertica -f reinstall.sql
-
-test:
