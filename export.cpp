@@ -342,6 +342,7 @@ getParameterType (
 	SizedColumnTypes &parameterTypes
 ) {
 	parameterTypes.addVarchar(NAME_MAX, "fpath");
+	parameterTypes.addVarchar(NAME_MAX, "compress");
 }
 
 }; // class ExportFactory
