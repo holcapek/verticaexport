@@ -9,7 +9,7 @@ all: libunload.so
 
 SOURCE_LIST = $(VERTICA_SDK)/include/Vertica.cpp unload.cpp
 
-libunload.so: $(SOURCE_LIST)
+libunload.so: $(SOURCE_LIST) Makefile
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(SOURCE_LIST)
 
 clean:
