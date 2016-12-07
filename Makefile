@@ -31,8 +31,8 @@ install: libunload.so
 	#sudo install -o vertica -g vertica pkg/package.conf /opt/vertica/packages/unload/
 	sudo install -o vertica -g vertica pkg/ddl/* /opt/vertica/packages/unload/ddl/
 	sudo install -o vertica -g vertica pkg/lib/* /opt/vertica/packages/unload/lib/
-	sudo su - vertica -c '/opt/vertica/bin/vsql -U vertica -f /opt/vertica/packages/unload/ddl/install.sql'
-	
+	sudo su - vertica -c '/opt/vertica/bin/admintools -t uninstall_package -d verticadb -P unload'
+	sudo su - vertica -c '/opt/vertica/bin/admintools -t install_package   -d verticadb -P unload'
 
 vsql:
 	$(RUNVSQL)
