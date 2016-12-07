@@ -4,6 +4,9 @@ OPTIMIZE=-O3
 CXXFLAGS=-I $(VERTICA_SDK)/include -fPIC -Wall -shared $(OPTIMIZE)
 LDFLAGS=-lpthread
 
+VSQL=/opt/vertica/bin/vsql
+RUNVSQL=$(VSQL) -U vertica
+
 
 all: libunload.so
 
@@ -30,3 +33,6 @@ install: libunload.so
 	sudo install -o vertica -g vertica pkg/lib/* /opt/vertica/packages/unload/lib/
 	sudo su - vertica -c '/opt/vertica/bin/vsql -U vertica -f /opt/vertica/packages/unload/ddl/install.sql'
 	
+
+vsql:
+	$(RUNVSQL)
