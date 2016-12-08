@@ -10,7 +10,7 @@ RUNVSQL=$(VSQL) -U vertica
 
 all: libunload.so
 
-SOURCE_LIST = $(VERTICA_SDK)/include/Vertica.cpp unload.cpp
+SOURCE_LIST = $(VERTICA_SDK)/include/Vertica.cpp unload.cpp unload.h
 
 libunload.so: $(SOURCE_LIST) Makefile
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(SOURCE_LIST)
@@ -36,3 +36,6 @@ install: libunload.so
 
 vsql:
 	$(RUNVSQL)
+
+test:
+	$(RUNVSQL) -c "select unload(primary_key) over (partition best) from (select primary_key, day_of_spot,station from tv_spots limit 1000) foo"
