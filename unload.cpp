@@ -111,16 +111,16 @@ private:
 			return;
 		}
 		// MAX_VINT = 9223372036854775807
-		// thats 20 chars: 19 digits, optional -
+		// thats 20 bytes at most: 19 digits, optional -, null byte
 		LOG(si, "last_record_offset=%li current_offset=%li", last_record_offset, current_offset);
-		// 1:minus,19:longestvint,1:comma
+		// 1:minus,19:longestvint,1:comma,1:nullbyte
 		if (current_offset + 1 + 19 + 1 <= BUFFER_SIZE) {
-			int len = sprintf(buffer+current_offset, "%lli,", *pr.getIntPtr(ci));
+			int len = sprintf(buffer+current_offset, "%lli%c", pr.getIntRef(ci), QUOTE_CHAR);
 			current_offset += len;
 		} else {
 			write_to_file(si, buffer, last_record_offset + 1);
 			reset_last_record_offset(si);
-			int len = sprintf(buffer+current_offset, "%lli,", pr.getIntRef(ci));
+			int len = sprintf(buffer+current_offset, "%lli%c", pr.getIntRef(ci), QUOTE_CHAR);
 			current_offset += len;
 		}
 	}
