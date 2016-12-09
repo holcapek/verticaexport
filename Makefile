@@ -2,7 +2,7 @@ VERTICA_SDK=/opt/vertica/sdk
 
 OPTIMIZE=-O3
 CXXFLAGS=-I $(VERTICA_SDK)/include -fPIC -Wall -shared $(OPTIMIZE)
-LDFLAGS=-lpthread
+LDFLAGS=-lpthread -lcsv
 
 VSQL=/opt/vertica/bin/vsql
 RUNVSQL=$(VSQL) -U vertica
@@ -38,4 +38,4 @@ vsql:
 	$(RUNVSQL)
 
 test:
-	$(RUNVSQL) -c "select unload(primary_key) over (partition best) from (select primary_key, day_of_spot,station from tv_spots limit 1000) foo"
+	$(RUNVSQL) -c "select unload(day_of_spot, station) over (partition nodes) from (select primary_key, day_of_spot,station from tv_spots limit 1000) foo"
