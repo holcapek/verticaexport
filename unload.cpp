@@ -71,26 +71,34 @@ private:
 
 		VString s = pr.getStringRef(ci);
 		vsize len = s.length();
-		// TODO use libcsv to handle escaping, etc.
 
-		if (current_offset + 2 + 1 + len <= BUFFER_SIZE) {
-			buffer[current_offset] = QUOTE_CHAR;
-			memcpy(buffer + current_offset + 1, s.data(), len);
-			buffer[current_offset + 1 + len] = QUOTE_CHAR;
-			buffer[current_offset + 1 + len + 1] = FIELD_DELIMITER_CHAR;
-			current_offset += len + 2 +1;
-		} else {
+		size_t space_avail = BUFFER_SIZE-current_offset-1;
+		size_t len_wrote = csv_write2(
+			buffer+current_offset,
+			space_avail,
+			s.data(),
+			len,
+			QUOTE_CHAR
+		);
+		LOG(si, "pass#1 str=[%s] len=%u avail=%li len_wrote=%lu", s.str().c_str(), len, space_avail, len_wrote);
+		// 1 for field delim
+		if (len_wrote >= space_avail) {
 			write_to_file(si, buffer, last_record_offset+1);
 			reset_last_record_offset(si);
-			buffer[current_offset] = QUOTE_CHAR;
-			current_offset += 1;
-			
-			buffer[current_offset] = QUOTE_CHAR;
-			memcpy(buffer + current_offset + 1, s.data(), len);
-			buffer[current_offset + 1 + len] = QUOTE_CHAR;
-			buffer[current_offset + 1 + len + 1] = FIELD_DELIMITER_CHAR;
-			current_offset += len + 2 +1;
+			// try again
+			len_wrote = csv_write2(
+				buffer+current_offset,
+				space_avail,
+				s.data(),
+				len,
+				QUOTE_CHAR
+			);
+			LOG(si, "pass#2 str=[%s] len=%u avail=%li len_wrote=%lu", s.str().c_str(), len, space_avail, len_wrote);
 		}
+		current_offset += len_wrote;
+		buffer[current_offset] = FIELD_DELIMITER_CHAR;
+		current_offset += 1;
+		LOG(si, "end last_record_offset=%lu current_offset=%lu", last_record_offset, current_offset);
 	}
 
 	inline void serialize_null(ServerInterface& si) {
@@ -114,22 +122,19 @@ private:
 		// thats 20 bytes at most: 19 digits, optional -, null byte
 		LOG(si, "last_record_offset=%li current_offset=%li", last_record_offset, current_offset);
 		// 1:minus,19:longestvint,1:comma,1:nullbyte
-		if (current_offset + 1 + 19 + 1 <= BUFFER_SIZE) {
-			int len = sprintf(buffer+current_offset, "%lli%c", pr.getIntRef(ci), QUOTE_CHAR);
+		if (current_offset + 1 + 19 + 1 + 1<= BUFFER_SIZE) {
+			int len = sprintf(buffer+current_offset, "%lli%c", *pr.getIntPtr(ci), FIELD_DELIMITER_CHAR);
 			current_offset += len;
 		} else {
 			write_to_file(si, buffer, last_record_offset + 1);
 			reset_last_record_offset(si);
-			int len = sprintf(buffer+current_offset, "%lli%c", pr.getIntRef(ci), QUOTE_CHAR);
+			int len = sprintf(buffer+current_offset, "%lli%c", *pr.getIntPtr(ci), FIELD_DELIMITER_CHAR);
 			current_offset += len;
 		}
 	}
 
 	inline void
 	reset_last_record_offset(ServerInterface &si) {
-			if (last_record_offset == -1) {
-				vt_report_error(0, "Buffer is too small to hold a single row");
-			}
 			memcpy(buffer, buffer+last_record_offset+1, current_offset - last_record_offset);
 			current_offset = current_offset - last_record_offset;
 			last_record_offset = -1;
